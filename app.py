@@ -1,8 +1,11 @@
-from flask import Flask, render_template_string
+import os
+from http.server import BaseHTTPRequestHandler, HTTPServer
+from urllib.parse import urlparse, parse_qs
 
-app = Flask(__name__)
 
-
+# -----------------------------
+# Check whether queen is safe
+# -----------------------------
 def is_safe(board, row, col):
     for prev_row in range(row):
         placed = board[prev_row]
@@ -18,12 +21,16 @@ def is_safe(board, row, col):
     return True
 
 
+# -----------------------------
+# N-Queens Backtracking
+# -----------------------------
 def solve_n_queens(n):
     board = [-1] * n
     solutions = []
     backtrack_count = [0]
 
     def backtrack(row):
+        # All queens placed
         if row == n:
             solutions.append(board[:])
             return
@@ -32,9 +39,10 @@ def solve_n_queens(n):
             if is_safe(board, row, col):
                 board[row] = col
 
+                # Place queen in next row
                 backtrack(row + 1)
 
-                # Undo
+                # Undo placement
                 board[row] = -1
                 backtrack_count[0] += 1
 
@@ -43,198 +51,398 @@ def solve_n_queens(n):
     return solutions, backtrack_count[0]
 
 
-HTML = """
+# -----------------------------
+# Create HTML chess board
+# -----------------------------
+def display_board(solution, n):
+    html = '<table class="board">'
+
+    for row in range(n):
+        html += "<tr>"
+
+        for col in range(n):
+            if solution[row] == col:
+                html += '<td class="queen">Q</td>'
+            else:
+                html += '<td>.</td>'
+
+        html += "</tr>"
+
+    html += "</table>"
+
+    return html
+
+
+# -----------------------------
+# Generate Web Page
+# -----------------------------
+def generate_page():
+
+    html = """
 <!DOCTYPE html>
 <html>
 <head>
-    <title>N-Queens Solver</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            background: #f4f4f4;
-            text-align: center;
-            padding: 30px;
-        }
 
-        h1 {
-            color: #222;
-        }
+<title>N-Queens Problem - DAA</title>
 
-        .container {
-            background: white;
-            max-width: 900px;
-            margin: auto;
-            padding: 30px;
-            border-radius: 12px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-        }
+<meta name="viewport" content="width=device-width, initial-scale=1">
 
-        input {
-            padding: 10px;
-            width: 100px;
-            font-size: 16px;
-        }
+<style>
 
-        button {
-            padding: 10px 20px;
-            font-size: 16px;
-            cursor: pointer;
-            background: #222;
-            color: white;
-            border: none;
-            border-radius: 6px;
-        }
+* {
+    box-sizing: border-box;
+}
 
-        .result {
-            margin-top: 25px;
-        }
+body {
+    margin: 0;
+    font-family: Arial, sans-serif;
+    background: #f4f6f8;
+    color: #222;
+}
 
-        .board {
-            margin: 20px auto;
-            border-collapse: collapse;
-        }
+.header {
+    background: #222;
+    color: white;
+    padding: 25px;
+    text-align: center;
+}
 
-        .board td {
-            width: 45px;
-            height: 45px;
-            border: 1px solid #333;
-            text-align: center;
-            font-size: 28px;
-        }
+.container {
+    max-width: 1100px;
+    margin: 30px auto;
+    padding: 20px;
+}
 
-        .board tr:nth-child(even) td:nth-child(odd),
-        .board tr:nth-child(odd) td:nth-child(even) {
-            background: #ddd;
-        }
+.card {
+    background: white;
+    padding: 25px;
+    margin-bottom: 25px;
+    border-radius: 12px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+}
 
-        .board tr:nth-child(even) td:nth-child(even),
-        .board tr:nth-child(odd) td:nth-child(odd) {
-            background: #fff;
-        }
+h1 {
+    margin-bottom: 10px;
+}
 
-        .solution {
-            margin: 30px 0;
-        }
-    </style>
+h2 {
+    margin-top: 0;
+}
+
+.experiment {
+    text-align: center;
+}
+
+.results {
+    display: flex;
+    justify-content: center;
+    gap: 20px;
+    flex-wrap: wrap;
+}
+
+.result-box {
+    background: #f8f8f8;
+    padding: 20px;
+    border-radius: 10px;
+    min-width: 220px;
+}
+
+.result-box h3 {
+    margin-top: 0;
+}
+
+.value {
+    font-size: 28px;
+    font-weight: bold;
+}
+
+.solution {
+    margin-top: 35px;
+    text-align: center;
+}
+
+.board {
+    border-collapse: collapse;
+    margin: 15px auto;
+}
+
+.board td {
+    width: 55px;
+    height: 55px;
+    border: 1px solid #333;
+    text-align: center;
+    font-size: 28px;
+    font-weight: bold;
+}
+
+.board tr:nth-child(odd) td:nth-child(even),
+.board tr:nth-child(even) td:nth-child(odd) {
+    background: #ddd;
+}
+
+.board tr:nth-child(odd) td:nth-child(odd),
+.board tr:nth-child(even) td:nth-child(even) {
+    background: white;
+}
+
+.queen {
+    font-size: 30px;
+}
+
+.info {
+    line-height: 1.7;
+}
+
+.footer {
+    text-align: center;
+    padding: 20px;
+    color: #666;
+}
+
+@media (max-width: 600px) {
+
+    .board td {
+        width: 40px;
+        height: 40px;
+        font-size: 22px;
+    }
+
+}
+
+</style>
+
 </head>
 
 <body>
 
+<div class="header">
+
+<h1>N-Queens Problem</h1>
+
+<p>Solving N-Queens using Backtracking</p>
+
+<p>CS5303 - Design and Analysis of Algorithms Lab</p>
+
+</div>
+
 <div class="container">
 
-    <h1>♛ N-Queens Solver</h1>
+<div class="card experiment">
 
-    <form method="GET">
-        <input
-            type="number"
-            name="n"
-            value="{{ n }}"
-            min="1"
-            max="12"
-            required
-        >
+<h2>Experiment Results</h2>
 
-        <button type="submit">Solve</button>
-    </form>
+<p>
+The program solves the N-Queens problem for N = 4, 6 and 8.
+</p>
 
-    {% if solved %}
+"""
 
-        <div class="result">
+    # -----------------------------
+    # Solve N = 4, 6, 8
+    # -----------------------------
 
-            <h2>N = {{ n }}</h2>
+    all_results = {}
 
-            <p>
-                <strong>{{ solution_count }}</strong>
-                solutions found
-            </p>
+    for n in [4, 6, 8]:
 
-            <p>
-                Backtracking operations:
-                <strong>{{ backtracks }}</strong>
-            </p>
+        solutions, backtracks = solve_n_queens(n)
 
-            {% if n <= 6 %}
+        all_results[n] = (solutions, backtracks)
 
-                <h2>Solutions</h2>
+        html += f"""
+<div class="card">
 
-                {% for solution in solutions %}
+<h2>N = {n}</h2>
 
-                    <div class="solution">
+<div class="results">
 
-                        <h3>Solution {{ loop.index }}</h3>
+<div class="result-box">
 
-                        <table class="board">
+<h3>Solutions</h3>
 
-                            {% for row in range(n) %}
+<div class="value">
+{len(solutions)}
+</div>
 
-                                <tr>
+</div>
 
-                                    {% for col in range(n) %}
+<div class="result-box">
 
-                                        <td>
-                                            {% if solution[row] == col %}
-                                                ♛
-                                            {% else %}
-                                                .
-                                            {% endif %}
-                                        </td>
+<h3>Backtracks</h3>
 
-                                    {% endfor %}
+<div class="value">
+{backtracks}
+</div>
 
-                                </tr>
+</div>
 
-                            {% endfor %}
+</div>
 
-                        </table>
+"""
 
-                    </div>
+        # Display all solutions for N = 4
+        if n == 4:
 
-                {% endfor %}
+            html += """
+<h2 style="margin-top:30px;">
+All Solutions for N = 4
+</h2>
+"""
 
-            {% else %}
+            for i, solution in enumerate(solutions, 1):
 
-                <p>
-                    Board display is hidden for N > 6
-                    to avoid displaying too many solutions.
-                </p>
+                html += f"""
 
-            {% endif %}
+<div class="solution">
 
-        </div>
+<h3>Solution {i}</h3>
 
-    {% endif %}
+<p>
+Array Representation:
+{solution}
+</p>
+
+{display_board(solution, n)}
+
+</div>
+
+"""
+
+        else:
+
+            html += """
+<p>
+Only the solution count is displayed for this value of N.
+</p>
+"""
+
+        html += """
+</div>
+"""
+
+    # -----------------------------
+    # Algorithm information
+    # -----------------------------
+
+    html += """
+
+<div class="card info">
+
+<h2>Algorithm</h2>
+
+<p>
+The N-Queens problem places N queens on an N × N chessboard
+such that no two queens attack each other.
+</p>
+
+<h3>Backtracking Approach</h3>
+
+<ol>
+
+<li>Start from the first row.</li>
+
+<li>Try placing a queen in each column.</li>
+
+<li>Check whether the position is safe.</li>
+
+<li>If safe, move to the next row.</li>
+
+<li>If no position is possible, backtrack to the previous row.</li>
+
+<li>Continue until all queens are placed.</li>
+
+</ol>
+
+<h3>Safety Conditions</h3>
+
+<ul>
+
+<li>No two queens can be in the same column.</li>
+
+<li>No two queens can be on the same diagonal.</li>
+
+</ul>
+
+<h3>Time Complexity</h3>
+
+<p>
+Approximately O(N!) in the worst case.
+</p>
+
+</div>
+
+</div>
+
+<div class="footer">
+
+<p>N-Queens Problem | DAA Lab | Backtracking</p>
 
 </div>
 
 </body>
+
 </html>
 """
 
+    return html
 
-@app.route("/")
-def home():
-    n = int(request.args.get("n", 4)) if request.args.get("n") else 4
 
-    if n < 1:
-        n = 1
+# -----------------------------
+# HTTP Server
+# -----------------------------
+class NQueensHandler(BaseHTTPRequestHandler):
 
-    if n > 12:
-        n = 12
+    def do_GET(self):
 
-    solutions, backtracks = solve_n_queens(n)
+        parsed_url = urlparse(self.path)
 
-    # Display solutions only for smaller boards
-    display_solutions = solutions if n <= 6 else []
+        if parsed_url.path != "/":
+            self.send_error(404, "Page Not Found")
+            return
 
-    return render_template_string(
-        HTML,
-        n=n,
-        solved=True,
-        solutions=display_solutions,
-        solution_count=len(solutions),
-        backtracks=backtracks
+        html = generate_page()
+
+        self.send_response(200)
+
+        self.send_header(
+            "Content-Type",
+            "text/html; charset=utf-8"
+        )
+
+        self.send_header(
+            "Content-Length",
+            str(len(html.encode("utf-8")))
+        )
+
+        self.end_headers()
+
+        self.wfile.write(
+            html.encode("utf-8")
+        )
+
+
+# -----------------------------
+# Start Server
+# -----------------------------
+def main():
+
+    # Render provides PORT automatically.
+    # For local execution, port 10000 is used.
+    port = int(
+        os.environ.get("PORT", 10000)
     )
+
+    server = HTTPServer(
+        ("0.0.0.0", port),
+        NQueensHandler
+    )
+
+    print(
+        f"N-Queens server running on port {port}"
+    )
+
+    server.serve_forever()
 
 
 if __name__ == "__main__":
-    app.run()
+    main()
